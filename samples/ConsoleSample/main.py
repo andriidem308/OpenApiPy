@@ -12,7 +12,7 @@ import datetime
 import calendar
 
 if __name__ == "__main__":
-    currentAccountId = None
+    currentAccountId = 26213142
     hostType = input("Host (Live/Demo): ")
     hostType = hostType.lower()
 
@@ -20,26 +20,30 @@ if __name__ == "__main__":
         print(f"{hostType} is not a valid host type.")
         hostType = input("Host (Live/Demo): ")
 
-    appClientId = input("App Client ID: ")
-    appClientSecret = input("App Client Secret: ")
-    isTokenAvailable = input("Do you have an access token? (Y/N): ").lower() == "y"
+    # appClientId = input("App Client ID: ")
+    # appClientSecret = input("App Client Secret: ")
+    # isTokenAvailable = input("Do you have an access token? (Y/N): ").lower() == "y"
 
-    accessToken = None
-    if isTokenAvailable == False:
-        appRedirectUri = input("App Redirect URI: ")
-        auth = Auth(appClientId, appClientSecret, appRedirectUri)
-        authUri = auth.getAuthUri()
-        print(f"Please continue the authentication on your browser:\n {authUri}")
-        webbrowser.open_new(authUri)
-        print("\nThen enter the auth code that is appended to redirect URI immediatly (the code is after ?code= in URI)")
-        authCode = input("Auth Code: ")
-        token = auth.getToken(authCode)
-        if "accessToken" not in token:
-            raise KeyError(token)
-        print("Token: \n", token)
-        accessToken = token["accessToken"]
-    else:
-        accessToken = input("Access Token: ")
+    appClientId = '5914_LRMBD0LJWuue78FqcOxTADdXpOqjDrrphnZiyUjCJC3yEqGlaM'
+    appClientSecret = 'm5IDK3v7iJnJcDHvo4RJjnyRv7CHEun5VjR57K4zQ8YLDcjTCJ'
+    accessToken = '5buBFoMeswX8jCd-4URRkWCjBA4Jg_2sGtEZL25kMAY'
+
+    # accessToken = None
+    # if isTokenAvailable == False:
+    #     appRedirectUri = input("App Redirect URI: ")
+    #     auth = Auth(appClientId, appClientSecret, appRedirectUri)
+    #     authUri = auth.getAuthUri()
+    #     print(f"Please continue the authentication on your browser:\n {authUri}")
+    #     webbrowser.open_new(authUri)
+    #     print("\nThen enter the auth code that is appended to redirect URI immediatly (the code is after ?code= in URI)")
+    #     authCode = input("Auth Code: ")
+    #     token = auth.getToken(authCode)
+    #     if "accessToken" not in token:
+    #         raise KeyError(token)
+    #     print("Token: \n", token)
+    #     accessToken = token["accessToken"]
+    # else:
+    #     accessToken = input("Access Token: ")
 
     client = Client(EndPoints.PROTOBUF_LIVE_HOST if hostType.lower() == "live" else EndPoints.PROTOBUF_DEMO_HOST, EndPoints.PROTOBUF_PORT, TcpProtocol)
 
