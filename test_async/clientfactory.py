@@ -24,9 +24,11 @@ class TcpProtocol(asyncio.Protocol):
         self.client = client
         self.loop = loop
         self.transport = None
+        self.buffer = b''
+        self.msg_length = None
 
     def connection_made(self, transport):
-        self.transport = transport
+        super().connection_made(transport)
         if not self._send_task:
             self._send_task = self.loop.create_task(self._send_strings())
         self.client.connected(self)
@@ -52,13 +54,17 @@ class TcpProtocol(asyncio.Protocol):
             msg = ProtoMessage(payload=message.SerializeToString(),
                                clientMsgId=clientMsgId,
                                payloadType=message.payloadType)
+
             data = msg.SerializeToString()
+            print(f'protocol _send data: {data}')
 
         if instant:
             self.transport.write(data)
             self._lastSendMessageTime = datetime.datetime.now()
         else:
+            print(f'self._send_queue: {self._send_queue}')
             self._send_queue.append((isCanceled, data))
+            print(f'self._send_queue appended: {self._send_queue}')
 
     async def _send_strings(self):
         while True:
@@ -78,26 +84,47 @@ class TcpProtocol(asyncio.Protocol):
             self._lastSendMessageTime = datetime.datetime.now()
             await asyncio.sleep(1)
 
-    def data_received(self, data):
-        print(data)
 
-        msg = ProtoMessage()
+    def string_received(self, data):
+        print(f'data: {data}')
+
+        msg = ProtoMessage()  # Create an instance of your protobuf message class
         msg.ParseFromString(data)
 
         if msg.payloadType == ProtoHeartbeatEvent().payloadType:
             self.heartbeat()
-        self.client.received(msg)
+        self.factory.received(msg)
+
+
+    def data_received(self, data):
+        import struct
+        self.buffer += data
+        while True:
+            if self.msg_length is None:
+                if len(self.buffer) >= 4:
+                    self.msg_length = struct.unpack('!I', self.buffer[:4])[0]
+                    self.buffer = self.buffer[4:]
+                else:
+                    break
+            if self.msg_length is not None:
+                if len(self.buffer) >= self.msg_length:
+                    msg = self.buffer[:self.msg_length]
+                    self.buffer = self.buffer[self.msg_length:]
+                    self.msg_length = None
+                    self.string_received(msg)
+                else:
+                    break
 
 
 class Client:
-    def __init__(self, host, port, protocol_factory, loop, numberOfMessagesToSendPerSecond=5):
+    def __init__(self, host: str, port: int, protocol_factory: TcpProtocol, loop: asyncio.AbstractEventLoop, numberOfMessagesToSendPerSecond: int = 5):
         self.loop = loop
         self.numberOfMessagesToSendPerSecond = numberOfMessagesToSendPerSecond
         self._events = dict()
         self._response_futures = dict()
         self.isConnected = False
 
-        self._protocol_factory = protocol_factory(self, loop)
+        self._protocol_factory: TcpProtocol = protocol_factory(self, loop)
         coro = loop.create_connection(lambda: self._protocol_factory, host, port)
         self._connection = loop.run_until_complete(coro)
 
@@ -123,22 +150,45 @@ class Client:
         if type(message) in [str, int]:
             message = Protobuf.get(message, **params)
 
-        future = self.loop.create_future()
+        response_future = self.loop.create_future()
         if clientMsgId is None:
-            clientMsgId = str(id(future))
-        if clientMsgId is not None:
-            self._response_futures[clientMsgId] = future
+            clientMsgId = str(id(response_future))
 
-        future.add_done_callback(lambda f: self._response_futures.pop(clientMsgId, None))
-
-        self._protocol_factory.send(message, clientMsgId=clientMsgId,
-                                    isCanceled=lambda: clientMsgId not in self._response_futures)
+        self._response_futures[clientMsgId] = response_future
 
         try:
-            return await asyncio.wait_for(future, timeout=responseTimeoutInSeconds)
+            await self._send_message(message, clientMsgId)
+
+            if response_future.done():
+                response = response_future.result()  # Get the result if available
+            else:
+                response = await asyncio.wait_for(response_future, timeout=responseTimeoutInSeconds)
+
+            print(f'client send response: {response}')
         except asyncio.TimeoutError:
-            future.cancel()
+            self._on_response_failure(clientMsgId)
+            print(f'TimeoutError: {response}')
             raise
+        finally:
+            print('aboba')
+            self._response_futures.pop(clientMsgId, None)
+
+        return response
+
+    async def _send_message(self, message, clientMsgId):
+        protocol = self._protocol_factory
+        protocol.send(message, clientMsgId=clientMsgId, isCanceled=lambda: clientMsgId not in self._response_futures)
+        self._response_futures[clientMsgId].set_result("Message sent successfully")
+
+    def _on_response_failure(self, clientMsgId):
+        if clientMsgId in self._response_futures:
+            future = self._response_futures.pop(clientMsgId)
+            future.set_exception(asyncio.TimeoutError())
+
+    def _timeout_response(self, clientMsgId):
+        if clientMsgId in self._response_futures:
+            response_futures = self._response_futures.pop(clientMsgId)
+            self.loop.call_soon_threadsafe(response_futures.set_exception, asyncio.TimeoutError())
 
     def setConnectedCallback(self, callback):
         self._connectedCallback = callback
@@ -151,6 +201,7 @@ class Client:
 
 
 if __name__ == "__main__":
+    currentAccountId = 26213142
     hostType = 'demo'
 
     while hostType != "live" and hostType != "demo":
@@ -166,14 +217,19 @@ if __name__ == "__main__":
                     EndPoints.PROTOBUF_PORT, TcpProtocol, loop)
 
 
-    async def connected(client):  # Callback for client connection
+    async def connected(client: Client):  # Callback for client connection
         print("\nConnected")
         request = ProtoOAApplicationAuthReq()
         request.clientId = appClientId
         request.clientSecret = appClientSecret
 
+        print(f'connected request: {request}')
+
         try:
             await client.send(request)
+            print('message sent!')
+            print('executing user command')
+            await executeUserCommand()
         except Exception as e:
             await onError(e)
 
@@ -183,6 +239,25 @@ if __name__ == "__main__":
 
 
     async def onMessageReceived(client, message):
+        if message.payloadType in [ProtoOASubscribeSpotsRes().payloadType, ProtoOAAccountLogoutRes().payloadType,
+                                   ProtoHeartbeatEvent().payloadType]:
+            return
+        elif message.payloadType == ProtoOAApplicationAuthRes().payloadType:
+            print("API Application authorized\n")
+            print(
+                "Please use setAccount command to set the authorized account before sending any other command, try help for more detail\n")
+            print("To get account IDs use ProtoOAGetAccountListByAccessTokenReq command")
+            if currentAccountId is not None:
+                sendProtoOAAccountAuthReq()
+                return
+        elif message.payloadType == ProtoOAAccountAuthRes().payloadType:
+            protoOAAccountAuthRes = Protobuf.extract(message)
+            print(f"Account {protoOAAccountAuthRes.ctidTraderAccountId} has been authorized\n")
+            print("This acccount will be used for all future requests\n")
+            print("You can change the account by using setAccount command")
+        else:
+            print("Message received: \n", Protobuf.extract(message))
+
         await asyncio.sleep(3)
         await executeUserCommand()
 
@@ -214,5 +289,10 @@ if __name__ == "__main__":
     # req.clientId = appClientId
     # req.clientSecret = appClientSecret
 
-    loop.run_until_complete(connected(client))
+    request = ProtoOAApplicationAuthReq()
+    request.clientId = appClientId
+    request.clientSecret = appClientSecret
+
+    loop.run_until_complete(client.send(request))
+    print('chcks')
     loop.run_forever()

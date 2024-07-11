@@ -39,6 +39,9 @@ class TcpProtocol(Int32StringReceiver):
             data = message
 
         if isinstance(message, ProtoMessage.__base__):
+
+            ###
+
             msg = ProtoMessage(payload=message.SerializeToString(),
                                clientMsgId=clientMsgId,
                                payloadType=message.payloadType)
@@ -66,6 +69,8 @@ class TcpProtocol(Int32StringReceiver):
         self._lastSendMessageTime = datetime.datetime.now()
 
     def stringReceived(self, data):
+        print(f'data: {data}')
+
         msg = ProtoMessage()
         msg.ParseFromString(data)
 
