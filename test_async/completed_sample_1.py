@@ -201,7 +201,6 @@ if __name__ == "__main__":
         request = ProtoOAApplicationAuthReq()
         request.clientId = appClientId
         request.clientSecret = appClientSecret
-        print(f'connected request: {request}')
         deferred = client.send(request)
         deferred.addErrback(onError)
 
