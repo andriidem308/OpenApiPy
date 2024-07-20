@@ -13,6 +13,7 @@ class TcpProtocol(Int32StringReceiver):
     _lastSendMessageTime = None
 
     def connectionMade(self):
+        print('$TcpProtocol connectionMade')
         super().connectionMade()
 
         if not self._send_task:
@@ -21,15 +22,18 @@ class TcpProtocol(Int32StringReceiver):
         self.factory.connected(self)
 
     def connectionLost(self, reason):
+        print('$TcpProtocol connectionLost')
         super().connectionLost(reason)
         if self._send_task.running:
             self._send_task.stop()
         self.factory.disconnected(reason)
 
     def heartbeat(self):
+        print('$TcpProtocol heartbeat')
         self.send(ProtoHeartbeatEvent(), True)
 
     def send(self, message, instant=False, clientMsgId=None, isCanceled = None):
+        print('$TcpProtocol send')
         data = b''
 
         if isinstance(message, ProtoMessage):
@@ -47,6 +51,8 @@ class TcpProtocol(Int32StringReceiver):
                                payloadType=message.payloadType)
             data = msg.SerializeToString()
 
+        print(f'protocol _send data: {data}')
+
         if instant:
             self.sendString(data)
             self._lastSendMessageTime = datetime.datetime.now()
@@ -54,6 +60,7 @@ class TcpProtocol(Int32StringReceiver):
             self._send_queue.append((isCanceled, data))
 
     def _sendStrings(self):
+        print('$TcpProtocol _sendStrings')
         size = len(self._send_queue)
 
         if not size:
@@ -69,6 +76,7 @@ class TcpProtocol(Int32StringReceiver):
         self._lastSendMessageTime = datetime.datetime.now()
 
     def stringReceived(self, data):
+        print('$TcpProtocol stringReceived')
         print(f'data: {data}')
 
         msg = ProtoMessage()

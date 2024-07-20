@@ -29,25 +29,27 @@ if __name__ == "__main__":
     accessToken = '5buBFoMeswX8jCd-4URRkWCjBA4Jg_2sGtEZL25kMAY'
 
     # accessToken = None
-    # if isTokenAvailable == False:
-    #     appRedirectUri = input("App Redirect URI: ")
-    #     auth = Auth(appClientId, appClientSecret, appRedirectUri)
-    #     authUri = auth.getAuthUri()
-    #     print(f"Please continue the authentication on your browser:\n {authUri}")
-    #     webbrowser.open_new(authUri)
-    #     print("\nThen enter the auth code that is appended to redirect URI immediatly (the code is after ?code= in URI)")
-    #     authCode = input("Auth Code: ")
-    #     token = auth.getToken(authCode)
-    #     if "accessToken" not in token:
-    #         raise KeyError(token)
-    #     print("Token: \n", token)
-    #     accessToken = token["accessToken"]
-    # else:
-    #     accessToken = input("Access Token: ")
+    isTokenAvailable = True
+
+    if isTokenAvailable == False:
+        appRedirectUri = input("App Redirect URI: ")
+        auth = Auth(appClientId, appClientSecret, appRedirectUri)
+        authUri = auth.getAuthUri()
+        print(f"Please continue the authentication on your browser:\n {authUri}")
+        webbrowser.open_new(authUri)
+        print("\nThen enter the auth code that is appended to redirect URI immediatly (the code is after ?code= in URI)")
+        authCode = input("Auth Code: ")
+        token = auth.getToken(authCode)
+        if "accessToken" not in token:
+            raise KeyError(token)
+        print("Token: \n", token)
+        accessToken = token["accessToken"]
+    else:
+        accessToken = input("Access Token: ")
 
     client = Client(EndPoints.PROTOBUF_LIVE_HOST if hostType.lower() == "live" else EndPoints.PROTOBUF_DEMO_HOST, EndPoints.PROTOBUF_PORT, TcpProtocol)
 
-    def connected(client): # Callback for client connection
+    def connected(client: Client): # Callback for client connection
         print("\nConnected")
         request = ProtoOAApplicationAuthReq()
         request.clientId = appClientId

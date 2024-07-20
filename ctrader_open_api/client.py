@@ -8,6 +8,7 @@ from twisted.internet import reactor, defer
 
 class Client(ClientService):
     def __init__(self, host, port, protocol, retryPolicy=None, clock=None, prepareConnection=None, numberOfMessagesToSendPerSecond=5):
+        print('*Client __init__')
         self._runningReactor = reactor
         self.numberOfMessagesToSendPerSecond = numberOfMessagesToSendPerSecond
         endpoint = clientFromString(self._runningReactor, f"ssl:{host}:{port}")
@@ -18,26 +19,31 @@ class Client(ClientService):
         self.isConnected = False
 
     def startService(self):
+        print('*Client startService')
         if self.running:
             return
         ClientService.startService(self)
 
     def stopService(self):
+        print('*Client stopService')
         if self.running and self.isConnected:
             ClientService.stopService(self)
 
     def _connected(self, protocol):
+        print('*Client _connected')
         self.isConnected = True
         if hasattr(self, "_connectedCallback"):
             self._connectedCallback(self)
 
     def _disconnected(self, reason):
+        print('*Client _disconnected')
         self.isConnected = False
         self._responseDeferreds.clear()
         if hasattr(self, "_disconnectedCallback"):
             self._disconnectedCallback(self, reason)
 
     def _received(self, message):
+        print('*Client _received')
         if hasattr(self, "_messageReceivedCallback"):
             self._messageReceivedCallback(self, message)
         if (message.clientMsgId is not None and message.clientMsgId in self._responseDeferreds):
@@ -46,24 +52,18 @@ class Client(ClientService):
             responseDeferred.callback(message)
 
     def send(self, message, clientMsgId=None, responseTimeoutInSeconds=5, **params):
+        print('*Client send')
         print(f'message: {type(message)}')
 
         if type(message) in [str, int]:
-            print(f'send a')
             message = Protobuf.get(message, **params)
-            print(f'send b')
 
         responseDeferred = defer.Deferred(self._cancelMessageDiferred)
 
-        print(f'clientMsgID 1: {clientMsgId}')
         if clientMsgId is None:
-            print(f'clientMsgID 2: {clientMsgId}')
             clientMsgId = str(id(responseDeferred))
-            print(f'clientMsgID 3: {clientMsgId}')
         if clientMsgId is not None:
-            print(f'clientMsgID 4: {clientMsgId}')
             self._responseDeferreds[clientMsgId] = responseDeferred
-            print(f'clientMsgID 5: {clientMsgId}')
 
         responseDeferred.addErrback(lambda failure: self._onResponseFailure(failure, clientMsgId))
         responseDeferred.addTimeout(responseTimeoutInSeconds, self._runningReactor)
@@ -75,20 +75,25 @@ class Client(ClientService):
         return responseDeferred
 
     def setConnectedCallback(self, callback):
+        print('*Client setConnectedCallback')
         self._connectedCallback = callback
 
     def setDisconnectedCallback(self, callback):
+        print('*Client setDisconnectedCallback')
         self._disconnectedCallback = callback
 
     def setMessageReceivedCallback(self, callback):
+        print('*Client setMessageReceivedCallback')
         self._messageReceivedCallback = callback
 
     def _onResponseFailure(self, failure, msgId):
+        print('*Client _onResponseFailure')
         if (msgId is not None and msgId in self._responseDeferreds):
             self._responseDeferreds.pop(msgId)
         return failure
 
     def _cancelMessageDiferred(self, deferred):
+        print('*Client _cancelMessageDiferred')
         deferredIdString = str(id(deferred))
         if (deferredIdString in self._responseDeferreds):
             self._responseDeferreds.pop(deferredIdString)
